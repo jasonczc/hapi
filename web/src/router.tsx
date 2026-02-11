@@ -31,6 +31,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { useToast } from '@/lib/toast-context'
 import { useTranslation } from '@/lib/use-translation'
 import { fetchLatestMessages, seedMessageWindowFromSession } from '@/lib/message-window-store'
+import { useSessionListDensity } from '@/hooks/useSessionListDensity'
 import FilesPage from '@/routes/sessions/files'
 import FilePage from '@/routes/sessions/file'
 import TerminalPage from '@/routes/sessions/terminal'
@@ -95,6 +96,27 @@ function SettingsIcon(props: { className?: string }) {
     )
 }
 
+function DensityIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <line x1="4" y1="7" x2="20" y2="7" />
+            <line x1="4" y1="12" x2="20" y2="12" />
+            <line x1="4" y1="17" x2="20" y2="17" />
+        </svg>
+    )
+}
+
 type NewSessionSearch = {
     directory?: string
     machineId?: string
@@ -120,6 +142,7 @@ function SessionsPage() {
     const matchRoute = useMatchRoute()
     const { t } = useTranslation()
     const { sessions, isLoading, error, refetch } = useSessions(api)
+    const { density, toggleDensity } = useSessionListDensity()
 
     const handleRefresh = useCallback(() => {
         void refetch()
@@ -136,6 +159,9 @@ function SessionsPage() {
     const sessionMatch = matchRoute({ to: '/sessions/$sessionId', fuzzy: true })
     const selectedSessionId = sessionMatch && sessionMatch.sessionId !== 'new' ? sessionMatch.sessionId : null
     const isSessionsIndex = pathname === '/sessions' || pathname === '/sessions/'
+    const toggleDensityLabel = density === 'comfortable'
+        ? t('sessions.display.toggleToCompact')
+        : t('sessions.display.toggleToComfortable')
 
     return (
         <div className="flex h-full min-h-0">
@@ -148,6 +174,15 @@ function SessionsPage() {
                             {t('sessions.count', { n: sessions.length, m: projectCount })}
                         </div>
                         <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={toggleDensity}
+                                className="p-1.5 rounded-full text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)] transition-colors"
+                                title={toggleDensityLabel}
+                                aria-label={toggleDensityLabel}
+                            >
+                                <DensityIcon className="h-5 w-5" />
+                            </button>
                             <button
                                 type="button"
                                 onClick={() => navigate({ to: '/settings' })}
@@ -186,6 +221,7 @@ function SessionsPage() {
                         isLoading={isLoading}
                         renderHeader={false}
                         api={api}
+                        density={density}
                     />
                 </div>
             </div>

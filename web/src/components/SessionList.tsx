@@ -8,6 +8,7 @@ import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useTranslation } from '@/lib/use-translation'
+import type { SessionListDensity } from '@/hooks/useSessionListDensity'
 
 type SessionGroup = {
     directory: string
@@ -176,9 +177,10 @@ function SessionItem(props: {
     showPath?: boolean
     api: ApiClient | null
     selected?: boolean
+    density: SessionListDensity
 }) {
     const { t } = useTranslation()
-    const { session: s, onSelect, showPath = true, api, selected = false } = props
+    const { session: s, onSelect, showPath = true, api, selected = false, density } = props
     const { haptic } = usePlatform()
     const [menuOpen, setMenuOpen] = useState(false)
     const [menuAnchorPoint, setMenuAnchorPoint] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
@@ -210,12 +212,13 @@ function SessionItem(props: {
     const statusDotClass = s.active
         ? (s.thinking ? 'bg-[#007AFF]' : 'bg-[var(--app-badge-success-text)]')
         : 'bg-[var(--app-hint)]'
+    const isCompact = density === 'compact'
     return (
         <>
             <button
                 type="button"
                 {...longPressHandlers}
-                className={`session-list-item flex w-full flex-col gap-1.5 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] select-none ${selected ? 'bg-[var(--app-secondary-bg)]' : ''}`}
+                className={`session-list-item flex w-full flex-col text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] select-none ${isCompact ? 'gap-1 px-2.5 py-2' : 'gap-1.5 px-3 py-3'} ${selected ? 'bg-[var(--app-secondary-bg)]' : ''}`}
                 style={{ WebkitTouchCallout: 'none' }}
                 aria-current={selected ? 'page' : undefined}
             >
@@ -261,18 +264,20 @@ function SessionItem(props: {
                         {s.metadata?.path ?? s.id}
                     </div>
                 ) : null}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--app-hint)]">
-                    <span className="inline-flex items-center gap-2">
-                        <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
-                            ❖
+                {!isCompact ? (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--app-hint)]">
+                        <span className="inline-flex items-center gap-2">
+                            <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
+                                ❖
+                            </span>
+                            {getAgentLabel(s)}
                         </span>
-                        {getAgentLabel(s)}
-                    </span>
-                    <span>{t('session.item.modelMode')}: {s.modelMode || 'default'}</span>
-                    {s.metadata?.worktree?.branch ? (
-                        <span>{t('session.item.worktree')}: {s.metadata.worktree.branch}</span>
-                    ) : null}
-                </div>
+                        <span>{t('session.item.modelMode')}: {s.modelMode || 'default'}</span>
+                        {s.metadata?.worktree?.branch ? (
+                            <span>{t('session.item.worktree')}: {s.metadata.worktree.branch}</span>
+                        ) : null}
+                    </div>
+                ) : null}
             </button>
 
             <SessionActionMenu
@@ -329,9 +334,10 @@ export function SessionList(props: {
     renderHeader?: boolean
     api: ApiClient | null
     selectedSessionId?: string | null
+    density?: SessionListDensity
 }) {
     const { t } = useTranslation()
-    const { renderHeader = true, api, selectedSessionId } = props
+    const { renderHeader = true, api, selectedSessionId, density = 'comfortable' } = props
     const groups = useMemo(
         () => groupSessionsByDirectory(props.sessions),
         [props.sessions]
@@ -392,7 +398,7 @@ export function SessionList(props: {
                     const isCollapsed = isGroupCollapsed(group)
                     return (
                         <div key={group.directory}>
-                            <div className="sticky top-0 z-10 flex w-full items-center gap-1 px-3 py-2 bg-[var(--app-bg)] border-b border-[var(--app-divider)]">
+                            <div className={`sticky top-0 z-10 flex w-full items-center gap-1 bg-[var(--app-bg)] border-b border-[var(--app-divider)] ${density === 'compact' ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
                                 <button
                                     type="button"
                                     onClick={() => toggleGroup(group.directory, isCollapsed)}
@@ -403,7 +409,7 @@ export function SessionList(props: {
                                         collapsed={isCollapsed}
                                     />
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                                        <span className="font-medium text-base break-words" title={group.directory}>
+                                        <span className={`font-medium break-words ${density === 'compact' ? 'text-sm' : 'text-base'}`} title={group.directory}>
                                             {group.displayName}
                                         </span>
                                         <span className="shrink-0 text-xs text-[var(--app-hint)]">
@@ -439,6 +445,7 @@ export function SessionList(props: {
                                             showPath={false}
                                             api={api}
                                             selected={s.id === selectedSessionId}
+                                            density={density}
                                         />
                                     ))}
                                 </div>

@@ -61,6 +61,23 @@ describe('SessionList project quick-create action', () => {
         })
     })
 
+    it('hides verbose metadata row in compact mode', () => {
+        renderWithProviders(
+            <SessionList
+                sessions={[createSession()]}
+                onSelect={vi.fn()}
+                onNewSession={vi.fn()}
+                onRefresh={vi.fn()}
+                isLoading={false}
+                renderHeader={false}
+                api={null}
+                density="compact"
+            />
+        )
+
+        expect(screen.queryByText(/mode:/i)).not.toBeInTheDocument()
+    })
+
     it('does not render group-level + for the Other group', () => {
         const view = renderWithProviders(
             <SessionList

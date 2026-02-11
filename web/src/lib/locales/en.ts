@@ -42,6 +42,8 @@ export default {
   'sessions.count': '{n} sessions in {m} projects',
   'sessions.new': 'New Session',
   'sessions.newInProject': 'New Session in this project',
+  'sessions.display.toggleToCompact': 'Switch to compact view',
+  'sessions.display.toggleToComfortable': 'Switch to comfortable view',
 
   // Session list
   'session.item.path': 'path',

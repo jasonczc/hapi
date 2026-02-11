@@ -42,6 +42,8 @@ export default {
   'sessions.count': '{n} 个会话，{m} 个项目',
   'sessions.new': '新建会话',
   'sessions.newInProject': '在此项目中新建会话',
+  'sessions.display.toggleToCompact': '切换到紧凑视图',
+  'sessions.display.toggleToComfortable': '切换到舒适视图',
 
   // Session list
   'session.item.path': '路径',
