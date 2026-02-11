@@ -10,10 +10,11 @@ import {
     useMatchRoute,
     useNavigate,
     useParams,
+    useSearch,
 } from '@tanstack/react-router'
 import { App } from '@/App'
 import { SessionChat } from '@/components/SessionChat'
-import { SessionList } from '@/components/SessionList'
+import { SessionList, type NewSessionPreset } from '@/components/SessionList'
 import { NewSession } from '@/components/NewSession'
 import { LoadingState } from '@/components/LoadingState'
 import { useAppContext } from '@/lib/app-context'
@@ -94,6 +95,24 @@ function SettingsIcon(props: { className?: string }) {
     )
 }
 
+type NewSessionSearch = {
+    directory?: string
+    machineId?: string
+}
+
+function toNewSessionSearch(preset?: NewSessionPreset): NewSessionSearch {
+    const directory = preset?.directory
+    const machineId = preset?.machineId
+    const next: NewSessionSearch = {}
+    if (directory) {
+        next.directory = directory
+    }
+    if (machineId) {
+        next.machineId = machineId
+    }
+    return next
+}
+
 function SessionsPage() {
     const { api } = useAppContext()
     const navigate = useNavigate()
@@ -105,6 +124,13 @@ function SessionsPage() {
     const handleRefresh = useCallback(() => {
         void refetch()
     }, [refetch])
+
+    const openNewSession = useCallback((preset?: NewSessionPreset) => {
+        navigate({
+            to: '/sessions/new',
+            search: toNewSessionSearch(preset)
+        })
+    }, [navigate])
 
     const projectCount = new Set(sessions.map(s => s.metadata?.worktree?.basePath ?? s.metadata?.path ?? 'Other')).size
     const sessionMatch = matchRoute({ to: '/sessions/$sessionId', fuzzy: true })
@@ -132,7 +158,7 @@ function SessionsPage() {
                             </button>
                             <button
                                 type="button"
-                                onClick={() => navigate({ to: '/sessions/new' })}
+                                onClick={() => openNewSession()}
                                 className="session-list-new-button p-1.5 rounded-full text-[var(--app-link)] transition-colors"
                                 title={t('sessions.new')}
                             >
@@ -155,7 +181,7 @@ function SessionsPage() {
                             to: '/sessions/$sessionId',
                             params: { sessionId },
                         })}
-                        onNewSession={() => navigate({ to: '/sessions/new' })}
+                        onNewSession={openNewSession}
                         onRefresh={handleRefresh}
                         isLoading={isLoading}
                         renderHeader={false}
@@ -329,6 +355,7 @@ function SessionDetailRoute() {
 function NewSessionPage() {
     const { api } = useAppContext()
     const navigate = useNavigate()
+    const search = useSearch({ from: '/sessions/new' })
     const goBack = useAppGoBack()
     const queryClient = useQueryClient()
     const { machines, isLoading: machinesLoading, error: machinesError } = useMachines(api, true)
@@ -375,6 +402,8 @@ function NewSessionPage() {
                 api={api}
                 machines={machines}
                 isLoading={machinesLoading}
+                initialDirectory={search.directory}
+                initialMachineId={search.machineId}
                 onCancel={handleCancel}
                 onSuccess={handleSuccess}
             />
@@ -471,6 +500,19 @@ const sessionFileRoute = createRoute({
 const newSessionRoute = createRoute({
     getParentRoute: () => sessionsRoute,
     path: 'new',
+    validateSearch: (search: Record<string, unknown>): NewSessionSearch => {
+        const directoryRaw = typeof search.directory === 'string' ? search.directory : undefined
+        const machineIdRaw = typeof search.machineId === 'string' ? search.machineId : undefined
+
+        const result: NewSessionSearch = {}
+        if (directoryRaw && directoryRaw.trim().length > 0) {
+            result.directory = directoryRaw
+        }
+        if (machineIdRaw && machineIdRaw.trim().length > 0) {
+            result.machineId = machineIdRaw
+        }
+        return result
+    },
     component: NewSessionPage,
 })
 

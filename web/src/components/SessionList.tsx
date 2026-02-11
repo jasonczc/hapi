@@ -17,6 +17,11 @@ type SessionGroup = {
     hasActiveSession: boolean
 }
 
+export type NewSessionPreset = {
+    directory?: string
+    machineId?: string
+}
+
 function getGroupDisplayName(directory: string): string {
     if (directory === 'Other') return directory
     const parts = directory.split(/[\\/]+/).filter(Boolean)
@@ -59,6 +64,10 @@ function groupSessionsByDirectory(sessions: SessionSummary[]): SessionGroup[] {
             }
             return b.latestUpdatedAt - a.latestUpdatedAt
         })
+}
+
+function getGroupMachineId(group: SessionGroup): string | undefined {
+    return group.sessions.find((session) => session.metadata?.machineId)?.metadata?.machineId
 }
 
 function PlusIcon(props: { className?: string }) {
@@ -314,7 +323,7 @@ function SessionItem(props: {
 export function SessionList(props: {
     sessions: SessionSummary[]
     onSelect: (sessionId: string) => void
-    onNewSession: () => void
+    onNewSession: (preset?: NewSessionPreset) => void
     onRefresh: () => void
     isLoading: boolean
     renderHeader?: boolean
@@ -369,7 +378,7 @@ export function SessionList(props: {
                     </div>
                     <button
                         type="button"
-                        onClick={props.onNewSession}
+                        onClick={() => props.onNewSession()}
                         className="session-list-new-button p-1.5 rounded-full text-[var(--app-link)] transition-colors"
                         title={t('sessions.new')}
                     >
@@ -383,24 +392,43 @@ export function SessionList(props: {
                     const isCollapsed = isGroupCollapsed(group)
                     return (
                         <div key={group.directory}>
-                            <button
-                                type="button"
-                                onClick={() => toggleGroup(group.directory, isCollapsed)}
-                                className="sticky top-0 z-10 flex w-full items-center gap-2 px-3 py-2 text-left bg-[var(--app-bg)] border-b border-[var(--app-divider)] transition-colors hover:bg-[var(--app-secondary-bg)]"
-                            >
-                                <ChevronIcon
-                                    className="h-4 w-4 text-[var(--app-hint)]"
-                                    collapsed={isCollapsed}
-                                />
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <span className="font-medium text-base break-words" title={group.directory}>
-                                        {group.displayName}
-                                    </span>
-                                    <span className="shrink-0 text-xs text-[var(--app-hint)]">
-                                        ({group.sessions.length})
-                                    </span>
-                                </div>
-                            </button>
+                            <div className="sticky top-0 z-10 flex w-full items-center gap-1 px-3 py-2 bg-[var(--app-bg)] border-b border-[var(--app-divider)]">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleGroup(group.directory, isCollapsed)}
+                                    className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-left transition-colors hover:bg-[var(--app-secondary-bg)]"
+                                >
+                                    <ChevronIcon
+                                        className="h-4 w-4 text-[var(--app-hint)]"
+                                        collapsed={isCollapsed}
+                                    />
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                        <span className="font-medium text-base break-words" title={group.directory}>
+                                            {group.displayName}
+                                        </span>
+                                        <span className="shrink-0 text-xs text-[var(--app-hint)]">
+                                            ({group.sessions.length})
+                                        </span>
+                                    </div>
+                                </button>
+                                {group.directory !== 'Other' ? (
+                                    <button
+                                        type="button"
+                                        onClick={(event) => {
+                                            event.stopPropagation()
+                                            props.onNewSession({
+                                                directory: group.directory,
+                                                machineId: getGroupMachineId(group)
+                                            })
+                                        }}
+                                        className="shrink-0 rounded p-1.5 text-[var(--app-link)] transition-colors hover:bg-[var(--app-secondary-bg)]"
+                                        title={t('sessions.newInProject')}
+                                        aria-label={t('sessions.newInProject')}
+                                    >
+                                        <PlusIcon className="h-4 w-4" />
+                                    </button>
+                                ) : null}
+                            </div>
                             {!isCollapsed ? (
                                 <div className="flex flex-col divide-y divide-[var(--app-divider)] border-b border-[var(--app-divider)]">
                                     {group.sessions.map((s) => (

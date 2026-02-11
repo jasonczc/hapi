@@ -26,6 +26,8 @@ export function NewSession(props: {
     api: ApiClient
     machines: Machine[]
     isLoading?: boolean
+    initialDirectory?: string
+    initialMachineId?: string
     onSuccess: (sessionId: string) => void
     onCancel: () => void
 }) {
@@ -35,8 +37,8 @@ export function NewSession(props: {
     const isFormDisabled = Boolean(isPending || props.isLoading)
     const { getRecentPaths, addRecentPath, getLastUsedMachineId, setLastUsedMachineId } = useRecentPaths()
 
-    const [machineId, setMachineId] = useState<string | null>(null)
-    const [directory, setDirectory] = useState('')
+    const [machineId, setMachineId] = useState<string | null>(props.initialMachineId ?? null)
+    const [directory, setDirectory] = useState(props.initialDirectory ?? '')
     const [suppressSuggestions, setSuppressSuggestions] = useState(false)
     const [isDirectoryFocused, setIsDirectoryFocused] = useState(false)
     const [pathExistence, setPathExistence] = useState<Record<string, boolean>>({})
@@ -47,6 +49,15 @@ export function NewSession(props: {
     const [worktreeName, setWorktreeName] = useState('')
     const [error, setError] = useState<string | null>(null)
     const worktreeInputRef = useRef<HTMLInputElement>(null)
+    const hasPresetDirectory = Boolean(props.initialDirectory?.trim())
+
+    useEffect(() => {
+        setMachineId(props.initialMachineId ?? null)
+    }, [props.initialMachineId])
+
+    useEffect(() => {
+        setDirectory(props.initialDirectory ?? '')
+    }, [props.initialDirectory])
 
     useEffect(() => {
         if (sessionType === 'worktree') {
@@ -75,12 +86,14 @@ export function NewSession(props: {
 
         if (foundLast) {
             setMachineId(foundLast.id)
-            const paths = getRecentPaths(foundLast.id)
-            if (paths[0]) setDirectory(paths[0])
+            if (!hasPresetDirectory) {
+                const paths = getRecentPaths(foundLast.id)
+                if (paths[0]) setDirectory(paths[0])
+            }
         } else if (props.machines[0]) {
             setMachineId(props.machines[0].id)
         }
-    }, [props.machines, machineId, getLastUsedMachineId, getRecentPaths])
+    }, [props.machines, machineId, getLastUsedMachineId, getRecentPaths, hasPresetDirectory])
 
     const recentPaths = useMemo(
         () => getRecentPaths(machineId),
