@@ -13,6 +13,23 @@ Run official Claude Code / Codex / Gemini / OpenCode sessions locally and contro
 - **Terminal Anywhere** - Run commands from your phone or browser, directly connected to the working machine.
 - **Voice Control** - Talk to your AI agent hands-free using the built-in voice assistant.
 
+## Branch-only features（本分支独有功能）
+
+This branch includes several UI and local-dev enhancements on top of upstream:
+
+- **Project-level quick create (+)**  
+  Add a new session directly under an existing project entry in the sidebar.
+
+- **Sidebar display density modes**  
+  Switch between **comfortable** and **compact** list density to fit different screen sizes and information density preferences.
+
+- **Responsive, resizable sidebar (desktop + mobile)**  
+  - Desktop: support **show/hide** and **drag-to-resize** (VSCode-like splitter interaction).  
+  - Mobile: use **drawer-style sidebar** with optimized top-right action layout and better touch ergonomics.
+
+- **Header-integrated sidebar toggle**  
+  Sidebar toggle entry is available in the chat header (next to back button), making navigation and layout control more coordinated.
+
 ## Demo
 
 https://github.com/user-attachments/assets/38230353-94c6-4dbe-9c29-b2a2cc457546
