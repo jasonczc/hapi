@@ -6,6 +6,7 @@ import { HappyChatProvider } from '@/components/AssistantChat/context'
 import { HappyAssistantMessage } from '@/components/AssistantChat/messages/AssistantMessage'
 import { HappyUserMessage } from '@/components/AssistantChat/messages/UserMessage'
 import { HappySystemMessage } from '@/components/AssistantChat/messages/SystemMessage'
+import { restoreScrollTopByDelta, shouldTriggerLoadOlder } from '@/components/AssistantChat/historyScroll'
 import { Spinner } from '@/components/Spinner'
 import { useTranslation } from '@/lib/use-translation'
 
@@ -182,13 +183,11 @@ export function HappyThread(props: {
         const THRESHOLD_PX = 120
         const LOAD_OLDER_THRESHOLD_PX = 96
         const LOAD_OLDER_REARM_PX = 180
+        const LOAD_OLDER_COOLDOWN_MS = 300
 
         const handleScroll = () => {
             const currentScrollTop = viewport.scrollTop
             const previousScrollTop = previousScrollTopRef.current
-            const isUserScrollingUp = currentScrollTop < previousScrollTop - 0.5
-            const crossedIntoTopTriggerZone =
-                previousScrollTop > LOAD_OLDER_THRESHOLD_PX && currentScrollTop <= LOAD_OLDER_THRESHOLD_PX
 
             const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
             const isNearBottom = distanceFromBottom < THRESHOLD_PX
@@ -211,15 +210,20 @@ export function HappyThread(props: {
                 loadMoreArmedRef.current = true
             }
 
-            if (
-                crossedIntoTopTriggerZone &&
-                isUserScrollingUp &&
-                loadMoreArmedRef.current &&
-                Date.now() - lastLoadTriggerAtRef.current > 300 &&
-                !isLoadingMessagesRef.current &&
-                !isLoadingMoreRef.current &&
-                hasMoreMessagesRef.current
-            ) {
+            const shouldTrigger = shouldTriggerLoadOlder({
+                previousScrollTop,
+                currentScrollTop,
+                thresholdPx: LOAD_OLDER_THRESHOLD_PX,
+                isArmed: loadMoreArmedRef.current,
+                isLoadingMessages: isLoadingMessagesRef.current,
+                isLoadingMoreMessages: isLoadingMoreRef.current,
+                hasMoreMessages: hasMoreMessagesRef.current,
+                lastTriggeredAtMs: lastLoadTriggerAtRef.current,
+                nowMs: Date.now(),
+                cooldownMs: LOAD_OLDER_COOLDOWN_MS
+            })
+
+            if (shouldTrigger) {
                 loadMoreArmedRef.current = false
                 lastLoadTriggerAtRef.current = Date.now()
                 startHistoryLoadingHint()
@@ -323,8 +327,11 @@ export function HappyThread(props: {
             return true
         }
 
-        const delta = viewport.scrollHeight - pending.scrollHeight
-        viewport.scrollTop = Math.max(0, pending.scrollTop + delta)
+        viewport.scrollTop = restoreScrollTopByDelta({
+            previousScrollTop: pending.scrollTop,
+            previousScrollHeight: pending.scrollHeight,
+            nextScrollHeight: viewport.scrollHeight
+        })
         previousScrollTopRef.current = viewport.scrollTop
 
         if (finalize) {
