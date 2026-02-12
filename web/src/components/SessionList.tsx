@@ -1,4 +1,8 @@
 import { forwardRef, useEffect, useMemo, useState } from 'react'
+import { DndContext, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Virtuoso } from 'react-virtuoso'
 import type { SessionSummary } from '@/types/api'
 import type { ApiClient } from '@/api/client'
@@ -8,6 +12,13 @@ import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import {
+    applySessionGroupOrder,
+    loadSessionGroupOrder,
+    moveSessionGroup,
+    persistSessionGroupOrder,
+    reconcileSessionGroupOrder
+} from '@/components/sessionGroupOrder'
 import { useTranslation } from '@/lib/use-translation'
 import type { SessionListDensity } from '@/hooks/useSessionListDensity'
 
@@ -368,6 +379,74 @@ function SessionItem(props: {
     )
 }
 
+function SessionGroupRow(props: {
+    group: SessionGroup
+    isCollapsed: boolean
+    density: SessionListDensity
+    onToggleGroup: (directory: string, isCollapsed: boolean) => void
+    onCreateInGroup: (preset?: NewSessionPreset) => void
+}) {
+    const { t } = useTranslation()
+    const { group, isCollapsed, density, onToggleGroup, onCreateInGroup } = props
+    const { setNodeRef, transform, transition, isDragging, isOver, listeners } = useSortable({
+        id: group.directory
+    })
+
+    const dragStyle = {
+        transform: CSS.Transform.toString(transform),
+        transition
+    }
+    const isDropTarget = isOver && !isDragging
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={dragStyle}
+            className={`z-10 flex w-full items-center gap-1 border-b border-[var(--app-divider)] cursor-grab active:cursor-grabbing select-none ${isDropTarget ? 'bg-[var(--app-secondary-bg)]' : 'bg-[var(--app-bg)]'} ${isDragging ? 'opacity-70' : ''} ${density === 'compact' ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}
+            {...listeners}
+        >
+            <button
+                type="button"
+                onClick={() => onToggleGroup(group.directory, isCollapsed)}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-left transition-colors hover:bg-[var(--app-secondary-bg)]"
+            >
+                <ChevronIcon
+                    className="h-4 w-4 text-[var(--app-hint)]"
+                    collapsed={isCollapsed}
+                />
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className={`font-medium break-words ${density === 'compact' ? 'text-sm' : 'text-base'}`} title={group.directory}>
+                        {group.displayName}
+                    </span>
+                    <span className="shrink-0 text-xs text-[var(--app-hint)]">
+                        ({group.sessions.length})
+                    </span>
+                </div>
+            </button>
+            {group.directory !== 'Other' ? (
+                <button
+                    type="button"
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onTouchStart={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                        event.stopPropagation()
+                        onCreateInGroup({
+                            directory: group.directory,
+                            machineId: getGroupMachineId(group)
+                        })
+                    }}
+                    className="shrink-0 rounded p-1.5 text-[var(--app-link)] transition-colors hover:bg-[var(--app-secondary-bg)]"
+                    title={t('sessions.newInProject')}
+                    aria-label={t('sessions.newInProject')}
+                >
+                    <PlusIcon className="h-4 w-4" />
+                </button>
+            ) : null}
+        </div>
+    )
+}
+
 export function SessionList(props: {
     sessions: SessionSummary[]
     onSelect: (sessionId: string) => void
@@ -381,13 +460,54 @@ export function SessionList(props: {
 }) {
     const { t } = useTranslation()
     const { renderHeader = true, api, selectedSessionId, density = 'comfortable' } = props
-    const groups = useMemo(
+    const baseGroups = useMemo(
         () => groupSessionsByDirectory(props.sessions),
         [props.sessions]
     )
+    const baseDirectories = useMemo(
+        () => baseGroups.map((group) => group.directory),
+        [baseGroups]
+    )
+    const [groupOrder, setGroupOrder] = useState<string[]>(() => loadSessionGroupOrder())
     const [collapseOverrides, setCollapseOverrides] = useState<Map<string, boolean>>(
         () => new Map()
     )
+    const groups = useMemo(
+        () => applySessionGroupOrder(baseGroups, groupOrder),
+        [baseGroups, groupOrder]
+    )
+    const sortableGroupDirectories = useMemo(
+        () => groups.map((group) => group.directory),
+        [groups]
+    )
+    const sensors = useSensors(
+        useSensor(MouseSensor, {
+            activationConstraint: {
+                distance: 4
+            }
+        }),
+        useSensor(TouchSensor, {
+            activationConstraint: {
+                delay: 220,
+                tolerance: 8
+            }
+        })
+    )
+
+    useEffect(() => {
+        setGroupOrder((prev) => {
+            const next = reconcileSessionGroupOrder(prev, baseDirectories)
+            if (prev.length === next.length && prev.every((value, index) => value === next[index])) {
+                return prev
+            }
+            return next
+        })
+    }, [baseDirectories])
+
+    useEffect(() => {
+        persistSessionGroupOrder(groupOrder)
+    }, [groupOrder])
+
     const isGroupCollapsed = (group: SessionGroup): boolean => {
         const override = collapseOverrides.get(group.directory)
         if (override !== undefined) return override
@@ -418,6 +538,16 @@ export function SessionList(props: {
         })
     }, [groups])
 
+    const handleGroupDragEnd = ({ active, over }: DragEndEvent) => {
+        if (!over || active.id === over.id) return
+        const sourceDirectory = String(active.id)
+        const targetDirectory = String(over.id)
+        setGroupOrder((prev) => {
+            const reconciled = reconcileSessionGroupOrder(prev, baseDirectories)
+            return moveSessionGroup(reconciled, sourceDirectory, targetDirectory)
+        })
+    }
+
     const rows = useMemo(
         () => flattenSessionRows(groups, isGroupCollapsed),
         [groups, collapseOverrides]
@@ -442,78 +572,57 @@ export function SessionList(props: {
             ) : null}
 
             <div className="flex-1 min-h-0">
-                <Virtuoso
-                    data={rows}
-                    style={{ height: '100%' }}
-                    defaultItemHeight={density === 'compact' ? 72 : 108}
-                    increaseViewportBy={360}
-                    initialItemCount={Math.min(rows.length, 24)}
-                    components={{
-                        Scroller: SessionListScroller
-                    }}
-                    computeItemKey={(_, row) => (
-                        row.type === 'group'
-                            ? `group:${row.group.directory}`
-                            : `session:${row.session.id}`
-                    )}
-                    itemContent={(_, row) => {
-                        if (row.type === 'group') {
-                            const { group, isCollapsed } = row
-                            return (
-                                <div className={`z-10 flex w-full items-center gap-1 border-b border-[var(--app-divider)] bg-[var(--app-bg)] ${density === 'compact' ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleGroup(group.directory, isCollapsed)}
-                                        className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-left transition-colors hover:bg-[var(--app-secondary-bg)]"
-                                    >
-                                        <ChevronIcon
-                                            className="h-4 w-4 text-[var(--app-hint)]"
-                                            collapsed={isCollapsed}
+                <DndContext
+                    sensors={sensors}
+                    onDragEnd={handleGroupDragEnd}
+                >
+                    <SortableContext
+                        items={sortableGroupDirectories}
+                        strategy={verticalListSortingStrategy}
+                    >
+                        <Virtuoso
+                            data={rows}
+                            style={{ height: '100%' }}
+                            defaultItemHeight={density === 'compact' ? 72 : 108}
+                            increaseViewportBy={360}
+                            initialItemCount={Math.min(rows.length, 24)}
+                            components={{
+                                Scroller: SessionListScroller
+                            }}
+                            computeItemKey={(_, row) => (
+                                row.type === 'group'
+                                    ? `group:${row.group.directory}`
+                                    : `session:${row.session.id}`
+                            )}
+                            itemContent={(_, row) => {
+                                if (row.type === 'group') {
+                                    return (
+                                        <SessionGroupRow
+                                            group={row.group}
+                                            isCollapsed={row.isCollapsed}
+                                            density={density}
+                                            onToggleGroup={toggleGroup}
+                                            onCreateInGroup={props.onNewSession}
                                         />
-                                        <div className="flex min-w-0 flex-1 items-center gap-2">
-                                            <span className={`font-medium break-words ${density === 'compact' ? 'text-sm' : 'text-base'}`} title={group.directory}>
-                                                {group.displayName}
-                                            </span>
-                                            <span className="shrink-0 text-xs text-[var(--app-hint)]">
-                                                ({group.sessions.length})
-                                            </span>
-                                        </div>
-                                    </button>
-                                    {group.directory !== 'Other' ? (
-                                        <button
-                                            type="button"
-                                            onClick={(event) => {
-                                                event.stopPropagation()
-                                                props.onNewSession({
-                                                    directory: group.directory,
-                                                    machineId: getGroupMachineId(group)
-                                                })
-                                            }}
-                                            className="shrink-0 rounded p-1.5 text-[var(--app-link)] transition-colors hover:bg-[var(--app-secondary-bg)]"
-                                            title={t('sessions.newInProject')}
-                                            aria-label={t('sessions.newInProject')}
-                                        >
-                                            <PlusIcon className="h-4 w-4" />
-                                        </button>
-                                    ) : null}
-                                </div>
-                            )
-                        }
+                                    )
+                                }
 
-                        return (
-                            <div className="border-b border-[var(--app-divider)]">
-                                <SessionItem
-                                    session={row.session}
-                                    onSelect={props.onSelect}
-                                    showPath={false}
-                                    api={api}
-                                    selected={row.session.id === selectedSessionId}
-                                    density={density}
-                                />
-                            </div>
-                        )
-                    }}
-                />
+                                return (
+                                    <div className="border-b border-[var(--app-divider)]">
+                                        <SessionItem
+                                            session={row.session}
+                                            onSelect={props.onSelect}
+                                            showPath={false}
+                                            api={api}
+                                            selected={row.session.id === selectedSessionId}
+                                            density={density}
+                                        />
+                                    </div>
+                                )
+                            }}
+                        />
+                    </SortableContext>
+                </DndContext>
             </div>
         </div>
     )

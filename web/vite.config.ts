@@ -88,7 +88,8 @@ export default defineConfig({
         rollupOptions: {
             output: {
                 manualChunks: {
-                    'vendor-virtuoso': ['react-virtuoso']
+                    'vendor-virtuoso': ['react-virtuoso'],
+                    'vendor-dnd': ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities']
                 }
             }
         }
