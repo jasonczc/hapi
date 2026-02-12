@@ -19,6 +19,9 @@ export type MessageWindowState = {
 }
 
 export const VISIBLE_WINDOW_SIZE = 400
+// When users scroll upward to load history, keep a larger buffer so they can
+// still scroll back down to recent messages after multiple "load older" actions.
+export const PREPEND_WINDOW_SIZE = 2000
 export const PENDING_WINDOW_SIZE = 200
 const PAGE_SIZE = 50
 const PENDING_OVERFLOW_WARNING = 'New messages arrived while you were away. Scroll to bottom to refresh.'
@@ -205,13 +208,14 @@ function buildState(
 }
 
 function trimVisible(messages: DecryptedMessage[], mode: 'append' | 'prepend'): DecryptedMessage[] {
-    if (messages.length <= VISIBLE_WINDOW_SIZE) {
+    const windowSize = mode === 'prepend' ? PREPEND_WINDOW_SIZE : VISIBLE_WINDOW_SIZE
+    if (messages.length <= windowSize) {
         return messages
     }
     if (mode === 'prepend') {
-        return messages.slice(0, VISIBLE_WINDOW_SIZE)
+        return messages.slice(0, windowSize)
     }
-    return messages.slice(messages.length - VISIBLE_WINDOW_SIZE)
+    return messages.slice(messages.length - windowSize)
 }
 
 function trimPending(

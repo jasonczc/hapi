@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { forwardRef, useEffect, useMemo, useState } from 'react'
+import { Virtuoso } from 'react-virtuoso'
 import type { SessionSummary } from '@/types/api'
 import type { ApiClient } from '@/api/client'
 import { useLongPress } from '@/hooks/useLongPress'
@@ -17,6 +18,17 @@ type SessionGroup = {
     latestUpdatedAt: number
     hasActiveSession: boolean
 }
+
+type SessionListRow =
+    | {
+        type: 'group'
+        group: SessionGroup
+        isCollapsed: boolean
+    }
+    | {
+        type: 'session'
+        session: SessionSummary
+    }
 
 export type NewSessionPreset = {
     directory?: string
@@ -71,6 +83,25 @@ function getGroupMachineId(group: SessionGroup): string | undefined {
     return group.sessions.find((session) => session.metadata?.machineId)?.metadata?.machineId
 }
 
+function flattenSessionRows(
+    groups: SessionGroup[],
+    isGroupCollapsed: (group: SessionGroup) => boolean
+): SessionListRow[] {
+    const rows: SessionListRow[] = []
+    for (const group of groups) {
+        const collapsed = isGroupCollapsed(group)
+        rows.push({ type: 'group', group, isCollapsed: collapsed })
+        if (collapsed) continue
+        for (const session of group.sessions) {
+            rows.push({
+                type: 'session',
+                session
+            })
+        }
+    }
+    return rows
+}
+
 function PlusIcon(props: { className?: string }) {
     return (
         <svg
@@ -90,6 +121,18 @@ function PlusIcon(props: { className?: string }) {
         </svg>
     )
 }
+
+const SessionListScroller = forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
+    function SessionListScroller(props, ref) {
+        return (
+            <div
+                {...props}
+                ref={ref}
+                className={`desktop-scrollbar-left ${props.className ?? ''}`.trim()}
+            />
+        )
+    }
+)
 
 function BulbIcon(props: { className?: string }) {
     return (
@@ -375,8 +418,13 @@ export function SessionList(props: {
         })
     }, [groups])
 
+    const rows = useMemo(
+        () => flattenSessionRows(groups, isGroupCollapsed),
+        [groups, collapseOverrides]
+    )
+
     return (
-        <div className="mx-auto w-full max-w-content flex flex-col">
+        <div className="mx-auto flex h-full w-full max-w-content min-h-0 flex-col">
             {renderHeader ? (
                 <div className="flex items-center justify-between px-3 py-1">
                     <div className="text-xs text-[var(--app-hint)]">
@@ -393,66 +441,79 @@ export function SessionList(props: {
                 </div>
             ) : null}
 
-            <div className="flex flex-col">
-                {groups.map((group) => {
-                    const isCollapsed = isGroupCollapsed(group)
-                    return (
-                        <div key={group.directory}>
-                            <div className={`sticky top-0 z-10 flex w-full items-center gap-1 bg-[var(--app-bg)] border-b border-[var(--app-divider)] ${density === 'compact' ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
-                                <button
-                                    type="button"
-                                    onClick={() => toggleGroup(group.directory, isCollapsed)}
-                                    className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-left transition-colors hover:bg-[var(--app-secondary-bg)]"
-                                >
-                                    <ChevronIcon
-                                        className="h-4 w-4 text-[var(--app-hint)]"
-                                        collapsed={isCollapsed}
-                                    />
-                                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                                        <span className={`font-medium break-words ${density === 'compact' ? 'text-sm' : 'text-base'}`} title={group.directory}>
-                                            {group.displayName}
-                                        </span>
-                                        <span className="shrink-0 text-xs text-[var(--app-hint)]">
-                                            ({group.sessions.length})
-                                        </span>
-                                    </div>
-                                </button>
-                                {group.directory !== 'Other' ? (
+            <div className="flex-1 min-h-0">
+                <Virtuoso
+                    data={rows}
+                    style={{ height: '100%' }}
+                    defaultItemHeight={density === 'compact' ? 72 : 108}
+                    increaseViewportBy={360}
+                    initialItemCount={Math.min(rows.length, 24)}
+                    components={{
+                        Scroller: SessionListScroller
+                    }}
+                    computeItemKey={(_, row) => (
+                        row.type === 'group'
+                            ? `group:${row.group.directory}`
+                            : `session:${row.session.id}`
+                    )}
+                    itemContent={(_, row) => {
+                        if (row.type === 'group') {
+                            const { group, isCollapsed } = row
+                            return (
+                                <div className={`z-10 flex w-full items-center gap-1 border-b border-[var(--app-divider)] bg-[var(--app-bg)] ${density === 'compact' ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
                                     <button
                                         type="button"
-                                        onClick={(event) => {
-                                            event.stopPropagation()
-                                            props.onNewSession({
-                                                directory: group.directory,
-                                                machineId: getGroupMachineId(group)
-                                            })
-                                        }}
-                                        className="shrink-0 rounded p-1.5 text-[var(--app-link)] transition-colors hover:bg-[var(--app-secondary-bg)]"
-                                        title={t('sessions.newInProject')}
-                                        aria-label={t('sessions.newInProject')}
+                                        onClick={() => toggleGroup(group.directory, isCollapsed)}
+                                        className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-left transition-colors hover:bg-[var(--app-secondary-bg)]"
                                     >
-                                        <PlusIcon className="h-4 w-4" />
-                                    </button>
-                                ) : null}
-                            </div>
-                            {!isCollapsed ? (
-                                <div className="flex flex-col divide-y divide-[var(--app-divider)] border-b border-[var(--app-divider)]">
-                                    {group.sessions.map((s) => (
-                                        <SessionItem
-                                            key={s.id}
-                                            session={s}
-                                            onSelect={props.onSelect}
-                                            showPath={false}
-                                            api={api}
-                                            selected={s.id === selectedSessionId}
-                                            density={density}
+                                        <ChevronIcon
+                                            className="h-4 w-4 text-[var(--app-hint)]"
+                                            collapsed={isCollapsed}
                                         />
-                                    ))}
+                                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                                            <span className={`font-medium break-words ${density === 'compact' ? 'text-sm' : 'text-base'}`} title={group.directory}>
+                                                {group.displayName}
+                                            </span>
+                                            <span className="shrink-0 text-xs text-[var(--app-hint)]">
+                                                ({group.sessions.length})
+                                            </span>
+                                        </div>
+                                    </button>
+                                    {group.directory !== 'Other' ? (
+                                        <button
+                                            type="button"
+                                            onClick={(event) => {
+                                                event.stopPropagation()
+                                                props.onNewSession({
+                                                    directory: group.directory,
+                                                    machineId: getGroupMachineId(group)
+                                                })
+                                            }}
+                                            className="shrink-0 rounded p-1.5 text-[var(--app-link)] transition-colors hover:bg-[var(--app-secondary-bg)]"
+                                            title={t('sessions.newInProject')}
+                                            aria-label={t('sessions.newInProject')}
+                                        >
+                                            <PlusIcon className="h-4 w-4" />
+                                        </button>
+                                    ) : null}
                                 </div>
-                            ) : null}
-                        </div>
-                    )
-                })}
+                            )
+                        }
+
+                        return (
+                            <div className="border-b border-[var(--app-divider)]">
+                                <SessionItem
+                                    session={row.session}
+                                    onSelect={props.onSelect}
+                                    showPath={false}
+                                    api={api}
+                                    selected={row.session.id === selectedSessionId}
+                                    density={density}
+                                />
+                            </div>
+                        )
+                    }}
+                />
             </div>
         </div>
     )

@@ -349,23 +349,25 @@ function SessionsPage() {
                     </div>
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-y-auto desktop-scrollbar-left">
+                <div className="flex min-h-0 flex-1 flex-col">
                     {error ? (
                         <div className="mx-auto w-full max-w-content px-3 py-2">
                             <div className="text-sm text-red-600">{error}</div>
                         </div>
                     ) : null}
-                    <SessionList
-                        sessions={sessions}
-                        selectedSessionId={selectedSessionId}
-                        onSelect={selectSession}
-                        onNewSession={openNewSession}
-                        onRefresh={handleRefresh}
-                        isLoading={isLoading}
-                        renderHeader={false}
-                        api={api}
-                        density={density}
-                    />
+                    <div className="min-h-0 flex-1">
+                        <SessionList
+                            sessions={sessions}
+                            selectedSessionId={selectedSessionId}
+                            onSelect={selectSession}
+                            onNewSession={openNewSession}
+                            onRefresh={handleRefresh}
+                            isLoading={isLoading}
+                            renderHeader={false}
+                            api={api}
+                            density={density}
+                        />
+                    </div>
                 </div>
             </>
         )
